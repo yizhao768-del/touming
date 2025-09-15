@@ -255,14 +255,14 @@
     }
 
     btn.addEventListener('click', () => {
-      // 若第一轮红包后需要展示额外确认页，则优先展示覆盖层
-      if(needOverlayAfterFirst){
+      if (btn.disabled) return; // 防误触
+      if (needOverlayAfterFirst){
         overlayMsg.textContent = '哇恭喜透明运气太好了，奖励再来一次';
         overlay.style.display = 'flex';
         needOverlayAfterFirst = false;
         return;
       }
-      $1
+      next();
     });
 
     // ======= 轻量 confetti 实现（Canvas） =======
