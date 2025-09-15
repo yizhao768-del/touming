@@ -167,41 +167,93 @@
 <canvas id="confetti" style="position:fixed; inset:0; pointer-events:none"></canvas>
 
   <script>
-  ;(() => {
-    const panel = document.getElementById('panel');$1const hint = document.getElementById('hint');
-
-    // 仪式感覆盖层
+  (function(){
+    // ---------- DOM ----------
+    const panel = document.getElementById('panel');
+    const message = document.getElementById('message');
+    const btn = document.getElementById('actionBtn');
+    const hint = document.getElementById('hint');
     const overlay = document.getElementById('overlay');
     const overlayMsg = document.getElementById('overlayMsg');
     const overlayBtn = document.getElementById('overlayBtn');
-    let needOverlayAfterFirst = false;
 
-    // 固定奖品顺序（稳定可复现）
-    const steps = [
-      { type:'draw', prize:'52元红包', note:'哇恭喜透明运气太好了，奖励再来一次' },
-      { type:'draw', prize:'无畏契约任意皮肤一个（选好告诉小玉领取）', note:'今天是透明的幸运日，免费再次奖励三次抽奖' },
-      { type:'draw', prize:'无条件要求劵（仅可对小玉使用）', note:'' },
-      { type:'draw', prize:'赛博小蛋糕（联系小玉领取）', note:'' },
-        /* 仪式感覆盖层（二次确认页） */
-  .overlay{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(255, 240, 248, .82); backdrop-filter: blur(6px); z-index:999; padding:22px; }
-  .overlay-card{ width:min(520px,92vw); background:linear-gradient(180deg,#fff,#fff7fb); border:1px solid #ffd6eb; border-radius:22px; box-shadow: var(--shadow); padding:24px 18px; text-align:center; }
-  .overlay-msg{ font-size:18px; color:#7e4e6d; line-height:1.8; margin-bottom:14px; }
-  .overlay .btn{ width:80%; max-width:280px; }
-
-  /* 手机适配优化 */
-  @media (max-width: 420px){
-    .title{ font-size:22px; }
-    .msg{ font-size:16px; }
-    .prize{ font-size:20px; }
-    .panel{ padding:16px 12px; }
-    .btn{ width: 96%; font-size:17px; }
-  }
-</style>
+    // ---------- STATE ----------
+    const STEPS = [
+      { prize:'52元红包', note:'哇恭喜透明运气太好了，奖励再来一次', overlayAfter:true },
+      { prize:'无畏契约任意皮肤一个（选好告诉小玉领取）', note:'今天是透明的幸运日，免费再次奖励三次抽奖' },
+      { prize:'无条件要求劵（仅可对小玉使用）' },
+      { prize:'赛博小蛋糕（联系小玉领取）' },
+      { prize:'亲爱的透明
+最终大奖是：祝你平平安安，无忧无虑
+希望你可以越来越好，永远都是小孩
+任何困难和不开心都可以和我说
+生日快乐，小朋友！！！', final:true }
     ];
+    let idx = -1;
+    let loadingTimer = null;
 
-    let started = false;
-    let idx = -1; // 当前 steps 下标
+    // ---------- EFFECTS ----------
+    const canvas = document.getElementById('confetti');
+    const ctx = canvas.getContext('2d');
+    let W,H; let pieces=[]; let petals=[]; let rafId=null; let petalTimer=null;
+    function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+    addEventListener('resize', resize); resize();
+    function rand(a,b){ return Math.random()*(b-a)+a; }
+    function makeConfetti(){
+      const colors = ['#ff79b5','#ffb6dc','#ffd6ea','#c7b7ff','#fff0f8'];
+      for(let i=0;i<70;i++){
+        const r = Math.random();
+        let shape = 'rect';
+        if(r < 1/14) shape = 'heart'; else if(r < 2/14) shape = 'star';
+        pieces.push({ x:rand(0,W), y:-10, w:rand(6,10), h:rand(10,16), vy:rand(2,4), vx:rand(-1,1), rot:rand(0,Math.PI), vr:rand(-.1,.1), color:colors[(Math.random()*colors.length)|0], shape });
+      }
+    }
+    function startPetals(){
+      const colors = ['#ffd6ea','#ffcbe6','#ffe1f2'];
+      let count = 0;
+      petalTimer && clearInterval(petalTimer);
+      petalTimer = setInterval(()=>{
+        if(count >= 12){ clearInterval(petalTimer); return; }
+        petals.push({ x:rand(0,W), y:-10, rx:rand(6,9), ry:rand(10,14), vx:rand(-.3,.3), vy:rand(.8,1.6), rot:rand(0,Math.PI), vr:rand(-.02,.02), color:colors[(Math.random()*colors.length)|0] });
+        count++;
+        if(!rafId) draw();
+      }, 400);
+      setTimeout(()=>{ clearInterval(petalTimer); }, 2500);
+    }
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      // confetti
+      pieces.forEach(p=>{
+        ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle=p.color;
+        if(p.shape==='rect') ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        else if(p.shape==='heart'){
+          const s=Math.min(p.w,p.h)*.7; ctx.beginPath(); ctx.moveTo(0,s/2); ctx.bezierCurveTo(s,-s/3,s/2,-s,0,-s/3); ctx.bezierCurveTo(-s/2,-s,-s,-s/3,0,s/2); ctx.fill();
+        } else if(p.shape==='star'){
+          const spikes=5, outer=Math.max(p.w,p.h)/2, inner=outer/2.6; let rotStar=Math.PI/2*3, x=0, y=0; ctx.beginPath(); ctx.moveTo(0,-outer);
+          for(let i=0;i<spikes;i++){ x=Math.cos(rotStar)*outer; y=Math.sin(rotStar)*outer; ctx.lineTo(x,y); rotStar+=Math.PI/spikes; x=Math.cos(rotStar)*inner; y=Math.sin(rotStar)*inner; ctx.lineTo(x,y); rotStar+=Math.PI/spikes; }
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore(); p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr;
+      });
+      pieces = pieces.filter(p=>p.y < H+20);
+      // petals
+      petals.forEach(pt=>{ ctx.save(); ctx.translate(pt.x,pt.y); ctx.rotate(pt.rot); ctx.globalAlpha=.9; ctx.fillStyle=pt.color; ctx.beginPath(); ctx.ellipse(0,0, pt.rx, pt.ry, 0, 0, Math.PI*2); ctx.fill(); ctx.restore(); pt.x+=pt.vx; pt.y+=pt.vy; pt.rot+=pt.vr; });
+      petals = petals.filter(pt=>pt.y < H+30);
+      rafId = requestAnimationFrame(draw);
+    }
+    function burstConfetti(){ makeConfetti(); if(!rafId) draw(); setTimeout(()=>{ cancelAnimationFrame(rafId); rafId=null; pieces=[]; ctx.clearRect(0,0,W,H); }, 1800); }
 
+    // 打字机Pro（用于最终祝福）
+    function typeWriterPro(text, el, done){
+      el.textContent=''; const heart=document.createElement('span'); heart.className='blink-heart'; heart.textContent='❤';
+      const arr=[...text]; let i=0; const key='生日快乐';
+      (function tick(){
+        if(i>=arr.length){ el.appendChild(heart); requestAnimationFrame(()=>heart.classList.add('show')); setTimeout(()=>{ heart.remove(); done&&done(); },900); return; }
+        const ch=arr[i++]; el.textContent+=ch; let delay=28; if(/[，。！？、,.!?]/.test(ch)) delay=120; if(el.textContent.endsWith(key)){ el.style.display='inline-block'; el.animate([{transform:'scale(1)'},{transform:'scale(1.04)'}],{duration:220,easing:'ease-out'}); delay=220; } setTimeout(tick, delay);
+      })();
+    }
+
+    // ---------- RENDER ----------
     function setLoading(){
       panel.innerHTML = `
         <div class="loading" aria-live="polite" aria-busy="true">
@@ -209,146 +261,72 @@
         </div>
         <div class="note">抽奖进行中，请稍候…</div>
       `;
-      btn.disabled = true;
-      hint.textContent = '正在抽奖…';
+      btn.disabled = true; hint.textContent = '正在抽奖…';
     }
-
-    function showPrize(p){$1
-      // 触发 reveal 动画（先移除再强制重排以便二次触发）
-      panel.classList.remove('reveal');
-      void panel.offsetWidth;
-      panel.classList.add('reveal');
-      btn.disabled = false;
-      btn.textContent = idx === steps.length - 1 ? '完成' : '确定';
-      hint.textContent = idx === steps.length - 1 ? '已到最后一项奖品' : '继续抽下一个';
-      if(idx === 0){ needOverlayAfterFirst = true; }
-      burstConfetti();
-    }</div>
-        <div class="prize" style="${isParagraph? 'font-size:18px; line-height:1.8; font-weight:700;' : ''}">${p.prize}</div>
-        ${ p.note ? `<div class="note" style="margin-top:8px">${p.note}</div>` : ''}
-      `;
-      btn.disabled = false;
-      btn.textContent = idx === steps.length - 1 ? '完成' : '确定';
-      hint.textContent = idx === steps.length - 1 ? '已到最后一项奖品' : '继续抽下一个';
-      burstConfetti();
-    }
-
-    function next(){
-      if(!started){
-        started = true;
-        hint.textContent = '好运来啦～';
-      }
-      idx++;
-      if(idx >= steps.length){
+    function showPrize(step){
+      // 最终祝福（打字机）
+      if(step.final){
         panel.innerHTML = `
-          <div class="hero-text">小透明不止今天，<br/>每一天都是你的幸运日！！！</div>
+          <div class="hero-text" id="heroText">小透明不止今天，<br/>每一天都是你的<span class="glow">幸运日</span>！！！</div>
+          <div class="voucher" id="voucher"></div>
         `;
-        btn.style.display = 'none';
-        hint.textContent = '';
-        burstConfetti();
+        const hero = document.getElementById('heroText');
+        requestAnimationFrame(()=> hero.classList.add('hero-sweep'));
+        const code = 'XIAOYU-TOUMING-' + Math.floor(Math.random()*9000+1000);
+        document.getElementById('voucher').textContent = '编号：' + code;
+        btn.style.display = 'none'; hint.textContent = '';
+        burstConfetti(); startPetals();
         return;
       }
-
-      // 抽奖动画
+      // 普通奖品
+      const isParagraph = step.prize.length > 40;
+      if(isParagraph){
+        panel.innerHTML = `
+          <div class="msg"></div>
+          <div class="prize" id="typebox" style="font-size:18px; line-height:1.9; font-weight:700; white-space:pre-wrap;"></div>
+          ${ step.note ? `<div class="note" style="margin-top:8px">${step.note}</div>` : ''}
+        `;
+      }else{
+        panel.innerHTML = `
+          <div class="msg">恭喜获得</div>
+          <div class="prize">${step.prize}</div>
+          ${ step.note ? `<div class="note" style="margin-top:8px">${step.note}</div>` : ''}
+        `;
+      }
+      // reveal 动画
+      panel.classList.remove('reveal'); void panel.offsetWidth; panel.classList.add('reveal');
+      btn.disabled = false; btn.textContent = '确定'; hint.textContent = idx === STEPS.length - 1 ? '' : '继续抽下一个';
+      burstConfetti();
+      // 若是长段落并且不是最终终章，使用打字机（可选）
+      if(isParagraph && !step.final){
+        const box=document.getElementById('typebox'); if(box) typeWriterPro(step.prize, box);
+      }
+    }
+    function next(){
+      idx++;
+      if(idx >= STEPS.length){ return; }
       setLoading();
-      setTimeout($1, 2200);
+      clearTimeout(loadingTimer);
+      loadingTimer = setTimeout(()=>{
+        const step = STEPS[idx];
+        showPrize(step);
+        // 首奖展示完需要弹礼封
+        if(step.overlayAfter){ setTimeout(()=>{ overlayMsg.textContent='哇恭喜透明运气太好了，奖励再来一次'; overlay.style.display='flex'; }, 300); }
+      }, 2200);
     }
 
-    btn.addEventListener('click', () => {
-      if (btn.disabled) return; // 防误触
-      if (needOverlayAfterFirst){
-        overlayMsg.textContent = '哇恭喜透明运气太好了，奖励再来一次';
-        overlay.style.display = 'flex';
-        needOverlayAfterFirst = false;
-        return;
-      }
+    // ---------- EVENTS ----------
+    btn.addEventListener('click', ()=>{
+      if(btn.disabled) return;
+      // 初始或已展示奖品 → 进入下一步 / 开始
       next();
     });
+    overlayBtn.addEventListener('click', ()=>{ overlay.style.display='none'; next(); });
 
-    // ======= 轻量 confetti 实现（Canvas） =======
-    const canvas = document.getElementById('confetti');
-    const ctx = canvas.getContext('2d');
-    let W, H; let pieces = []; let rafId;
-
-    function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
-    window.addEventListener('resize', resize); resize();
-
-    function rand(min, max){ return Math.random() * (max - min) + min; }
-
-    function makeConfetti(){
-      const colors = ['#ff79b5','#ffb6dc','#ffd6ea','#c7b7ff','#fff0f8'];
-      for(let i=0;i<70;i++){
-        pieces.push({
-          x: rand(0, W), y: -10, w: rand(6,10), h: rand(10,16),
-          vy: rand(2, 4), vx: rand(-1,1), rot: rand(0, Math.PI), vr: rand(-0.1, 0.1),
-          color: colors[(Math.random()*colors.length)|0]
-        });
-      }
-    }
-
-    function draw(){
-      ctx.clearRect(0,0,W,H);
-      pieces.forEach(p => {
-        ctx.save();
-        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-        ctx.fillStyle = p.color; ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
-        ctx.restore();
-        p.x += p.vx; p.y += p.vy; p.rot += p.vr;
-      });
-      pieces = pieces.filter(p => p.y < H + 20);
-      rafId = requestAnimationFrame(draw);
-    }
-
-    function burstConfetti(){$1}
-
-    // 打字机效果
-    function typeWriter(text, el, speed){
-      el.textContent = '';
-      const chars = text.split('');
-      let i = 0;
-      const timer = setInterval(() => {
-        el.textContent += chars[i];
-        i++;
-        if(i >= chars.length){ clearInterval(timer); }
-      }, speed);
-    }
-
-    // 覆盖层按钮：关闭并进入下一步
-    // 打字机Pro：节奏变化 + 终行心形闪烁一次
-    function typeWriterPro(text, el, onDone){
-      el.textContent = '';
-      const heart = document.createElement('span');
-      heart.className = 'blink-heart';
-      heart.textContent = '❤';
-      const arr = text.split('');
-      let i = 0;
-      const key = '生日快乐';
-      (function tick(){
-        if(i >= arr.length){
-          el.appendChild(heart);
-          requestAnimationFrame(()=> heart.classList.add('show'));
-          setTimeout(()=> { heart.remove(); onDone && onDone(); }, 900);
-          return;
-        }
-        const ch = arr[i++];
-        el.textContent += ch;
-        let delay = 28;
-        if(/[，。！？、,.!?]/.test(ch)) delay = 120;
-        if(el.textContent.endsWith(key)){
-          el.style.display = 'inline-block';
-          el.animate([{transform:'scale(1)'},{transform:'scale(1.04)'}], {duration:220, easing:'ease-out'});
-          delay = 220;
-        }
-        setTimeout(tick, delay);
-      })();
-    }
-
-    overlayBtn.addEventListener('click', () => {
-      overlay.style.display = 'none';
-      next();
-    });
-
+    // 初始状态
+    message.textContent = '小透明恭喜你获得特别抽奖福利，你准备好了吗？';
+    hint.textContent = '点击确定开始抽奖';
   })();
-  </script>
+</script>
 </body>
 </html>
